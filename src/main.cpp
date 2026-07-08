@@ -74,7 +74,6 @@ void loop() {
     button2WasPressed = false;
   }
   
-
   if (blinkState == 1) {
     blinkSpeedIndex--;
     if (blinkSpeedIndex < 0)
@@ -100,6 +99,5 @@ void loop() {
   }
 
   blinkFunction(blinkSpeeds[blinkSpeedIndex]);
-  delay(); // небольшая задержка для стабилизации работы
-  
+  delay(50);  
 }
