@@ -100,5 +100,6 @@ void loop() {
   }
 
   blinkFunction(blinkSpeeds[blinkSpeedIndex]);
+  delay(); // небольшая задержка для стабилизации работы
   
 }
