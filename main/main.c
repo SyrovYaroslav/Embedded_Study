@@ -1,56 +1,67 @@
-#include <stdio.h>
-#include "driver/gpio.h"
+#include "driver/ledc.h"
 #include "esp_timer.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_log.h"
 
-static const char *TAG = "LED";
+#define BUZZER_GPIO 18
+#define TICK_MS 50
 
-typedef struct
+#define C5 523
+#define D5 587
+#define E5 659
+#define F5 698
+#define G5 784
+
+static const int freqs[] = {E5, E5, F5, G5, G5, F5, E5, D5, C5, C5, D5, E5, E5, D5, D5};
+static const int ticks[] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 6, 2, 8};
+#define NOTES (sizeof(freqs) / sizeof(freqs[0]))
+
+static int idx = 0;
+static int left = 0;
+static esp_timer_handle_t timer;
+
+static void tick(void *arg)
 {
-    gpio_num_t pin;
-    uint32_t period;
-    uint32_t lastTime;
-    bool state;
-} Led;
+    if (left == 0)
+    {
+        if (idx >= NOTES)
+        {
+            idx = 0;
+        }
+        ledc_set_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0, freqs[idx]);
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 2048);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+        left = ticks[idx];
+        idx++;
+    }
 
-static inline uint32_t millis(void)
-{
-    return (uint32_t)(esp_timer_get_time() / 1000ULL);
+    left--;
+    if (left == 0)
+    {
+        ledc_stop(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0);
+    }
 }
 
 void app_main(void)
 {
-    Led leds[] =
-        {
-            {GPIO_NUM_4, 200, 0, false},
-            {GPIO_NUM_5, 500, 0, false},
-            {GPIO_NUM_6, 1000, 0, false},
-        };
+    ledc_timer_config_t t = {
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .timer_num = LEDC_TIMER_0,
+        .duty_resolution = LEDC_TIMER_12_BIT,
+        .freq_hz = 1000,
+        .clk_cfg = LEDC_AUTO_CLK,
+    };
+    ledc_timer_config(&t);
 
-    const int ledCount = sizeof(leds) / sizeof(leds[0]);
+    ledc_channel_config_t c = {
+        .gpio_num = BUZZER_GPIO,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .channel = LEDC_CHANNEL_0,
+        .timer_sel = LEDC_TIMER_0,
+        .duty = 0,
+        .hpoint = 0,
+    };
+    ledc_channel_config(&c);
 
-    for (int i = 0; i < ledCount; i++)
-    {
-        gpio_reset_pin(leds[i].pin);
-        gpio_set_direction(leds[i].pin, GPIO_MODE_OUTPUT);
-    }
-
-    while (1)
-    {
-        uint32_t now = millis();
-
-        for (int i = 0; i < ledCount; i++)
-        {
-            if (now - leds[i].lastTime >= leds[i].period)
-            {
-                leds[i].lastTime = now;
-                leds[i].state = !leds[i].state;
-                gpio_set_level(leds[i].pin, leds[i].state);
-            }
-        }
-
-        vTaskDelay(1);
-    }
+    esp_timer_create_args_t args = {.callback = tick, .name = "tick"};
+    esp_timer_create(&args, &timer);
+    esp_timer_start_periodic(timer, TICK_MS * 1000);
 }
